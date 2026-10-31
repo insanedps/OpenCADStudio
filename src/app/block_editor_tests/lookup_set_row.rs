@@ -42,3 +42,36 @@ fn lookup_set_row_opens_the_table_editor_without_the_action_bar_refusal() {
         "one parameter, authored once"
     );
 }
+
+/// The row places a parameter of its own, so it has to open that parameter's
+/// table even when the definition already carries another one.
+#[test]
+fn lookup_set_row_opens_the_table_of_the_parameter_it_placed() {
+    let (mut app, reference) = fixture();
+    begin(&mut app, reference);
+    let _ = app.run_command_line("BPARAMETER LOOKUP 0,0");
+    let i = app.active_tab;
+    let definition = app.tabs[i]
+        .active_block_edit_session()
+        .unwrap()
+        .br_handle;
+    let handles = |app: &OpenCADStudio| {
+        crate::scene::block_lookup::parameters(&app.tabs[i].scene.document, definition)
+            .into_iter()
+            .map(|(handle, _)| handle)
+            .collect::<Vec<_>>()
+    };
+    let first = handles(&app)[0];
+    let _ = app.dispatch_command("BPARAMETERSET Lookup Set");
+    feed(&mut app, "1,1");
+    feed(&mut app, "");
+    let all = handles(&app);
+    assert_eq!(all.len(), 2, "the row authored the second parameter");
+    let placed = *all.iter().find(|handle| **handle != first).unwrap();
+    let state = app.block_lookup.as_ref().expect("the table editor opens");
+    assert_eq!(state.drafts.len(), 2, "both tables are listed");
+    assert_eq!(
+        state.drafts[state.selected].parameter, placed,
+        "the table of the parameter the row just placed, not the older one"
+    );
+}

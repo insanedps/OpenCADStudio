@@ -399,8 +399,7 @@ impl CadCommand for ActionCommand {
                 };
                 if dist <= 1e-6 || !dist.is_finite() {
                     return Some(CmdResult::ReportError(
-                        crate::t!("Specify a positive distance as a single value, not a point.")
-                            .into_owned(),
+                        crate::t!("Specify a positive distance.").into_owned(),
                     ));
                 }
                 self.column_offset = Some(dist);
@@ -415,8 +414,7 @@ impl CadCommand for ActionCommand {
                 };
                 if dist <= 1e-6 || !dist.is_finite() {
                     return Some(CmdResult::ReportError(
-                        crate::t!("Specify a positive distance as a single value, not a point.")
-                            .into_owned(),
+                        crate::t!("Specify a positive distance.").into_owned(),
                     ));
                 }
                 self.row_offset = Some(dist);
