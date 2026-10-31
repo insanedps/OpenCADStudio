@@ -70,6 +70,52 @@ fn block_lookup_expression_authoring_audit_history_and_literal_persistence() {
     let _ = app.update(Message::CloseModal);
 }
 
+// An empty cell holds no control characters, and the other table dialog already
+// names the condition correctly; both should say the same thing.
+#[test]
+fn block_lookup_dialog_names_an_empty_cell_without_blaming_control_characters() {
+    let (mut app, _, _) = lookup_editor_fixture();
+    let _ = app.dispatch_command("BLOOKUPTABLE");
+    edit_lookup(&mut app);
+    let _ = app.update(Message::BlockLookup(A::Cell(0, 1, String::new())));
+    let _ = app.update(Message::BlockLookup(A::Audit));
+    assert_eq!(
+        app.block_lookup
+            .as_ref()
+            .unwrap()
+            .error
+            .as_deref()
+            .unwrap(),
+        "Each cell must be a finite number.",
+        "an empty cell is reported as the cell it is"
+    );
+    let _ = app.update(Message::BlockLookup(A::Cell(0, 1, "   ".into())));
+    let _ = app.update(Message::BlockLookup(A::Audit));
+    assert_eq!(
+        app.block_lookup
+            .as_ref()
+            .unwrap()
+            .error
+            .as_deref()
+            .unwrap(),
+        "Each cell must be a finite number.",
+        "spaces are an empty cell too"
+    );
+    let _ = app.update(Message::BlockLookup(A::Cell(0, 1, "Small\u{1}".into())));
+    let _ = app.update(Message::BlockLookup(A::Audit));
+    assert_eq!(
+        app.block_lookup
+            .as_ref()
+            .unwrap()
+            .error
+            .as_deref()
+            .unwrap(),
+        "Complete each cell without control characters.",
+        "the control-character message stays for the case it names"
+    );
+    let _ = app.update(Message::CloseModal);
+}
+
 #[test]
 fn block_lookup_range_and_formula_properties_evaluate_in_drawing_and_test_block() {
     for testing in [false, true] {
