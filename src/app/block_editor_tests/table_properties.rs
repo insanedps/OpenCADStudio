@@ -382,7 +382,7 @@ fn blocks_reports_an_unmatched_table_row_as_present_and_unmatched() {
     let properties = block["dynamic_properties"].as_object().unwrap();
     assert!(
         properties.contains_key(&label),
-        "the panel shows Custom for this row, so the read model keeps it: {unmatched}"
+        "the row stays present even though no value applies to it: {unmatched}"
     );
     assert_eq!(properties[&label], serde_json::Value::Null, "{unmatched}");
 }
