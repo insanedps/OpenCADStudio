@@ -418,7 +418,16 @@ impl OpenCADStudio {
         };
         let id = state.document_id;
         let name = state.name.trim().to_string();
-        if name.is_empty() || state.error.is_some() {
+        let refused = state.error.is_some();
+        if name.is_empty() || refused {
+            if name.is_empty() {
+                // `OK` is reachable with an empty field, and silence is not an
+                // answer: say what the field is short of.
+                let state = self.block_edit_picker.as_mut().unwrap();
+                state.error = Some(
+                    crate::t!("The name must be at least one character long.").into_owned(),
+                );
+            }
             return Task::none();
         }
         let Some(i) = self.tabs.iter().position(|tab| tab.id == id) else {

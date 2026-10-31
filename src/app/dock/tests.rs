@@ -2083,6 +2083,53 @@ fn authoring_control(app: &OpenCADStudio, id: &'static str) -> iced::Point {
     }
 }
 
+/// An empty name has to be answered by clicking `OK`: while the button is
+/// disabled for an empty field the dialog's own refusal is unreachable.
+#[test]
+fn block_edit_entry_dialog_answers_an_empty_name_when_ok_is_clicked() {
+    use crate::app::ModalKind;
+    let mut app = OpenCADStudio::new_for_test();
+    app.automation_op(r#"{"op":"new"}"#);
+    let tab = app.active_tab;
+    app.tabs[tab].scene.deselect_all();
+    let _ = app.dispatch_command("BEDIT");
+    assert_eq!(app.active_modal, Some(ModalKind::BlockEditPicker));
+    let _ = app.update(Message::BlockEditPickerName(String::new()));
+    assert!(app.block_edit_picker.as_ref().unwrap().error.is_none());
+    assert!(
+        try_find_in_view(
+            &app,
+            "The name must be at least one character long."
+        )
+        .is_none(),
+        "nothing is said before the button is pressed"
+    );
+    let point = find_in_view(&app, "OK");
+    drive_view(
+        &mut app,
+        point,
+        &[
+            iced::Event::Mouse(iced::mouse::Event::ButtonPressed(iced::mouse::Button::Left)),
+            iced::Event::Mouse(iced::mouse::Event::ButtonReleased(iced::mouse::Button::Left)),
+        ],
+    );
+    assert_eq!(
+        app.block_edit_picker.as_ref().unwrap().error.as_deref(),
+        Some("The name must be at least one character long."),
+        "the click reached the dialog"
+    );
+    assert!(
+        try_find_in_view(
+            &app,
+            "The name must be at least one character long."
+        )
+        .is_some(),
+        "the reason is on screen"
+    );
+    assert_eq!(app.active_modal, Some(ModalKind::BlockEditPicker));
+    assert!(app.tabs[tab].active_block_edit.is_none());
+}
+
 fn authoring_click(app: &mut OpenCADStudio, point: iced::Point) {
     drive_view(
         app,

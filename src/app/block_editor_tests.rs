@@ -5822,8 +5822,19 @@ fn locked_bedit_dialog_name_validation() {
 
     let _ = app.update(Message::BlockEditPickerName("".to_string()));
     let _ = app.update(Message::BlockEditPickerApply);
+    assert_eq!(
+        app.block_edit_picker.as_ref().unwrap().error.as_deref(),
+        Some("The name must be at least one character long."),
+        "an empty name is answered with the reason it was refused"
+    );
     assert_eq!(app.active_modal, Some(ModalKind::BlockEditPicker));
     assert!(app.tabs[tab].active_block_edit.is_none());
+
+    let _ = app.update(Message::BlockEditPickerName("USABLE".to_string()));
+    assert!(
+        app.block_edit_picker.as_ref().unwrap().error.is_none(),
+        "typing a name retires the refusal"
+    );
 
     let _ = app.update(Message::CloseModal);
     assert_eq!(app.active_modal, None);
