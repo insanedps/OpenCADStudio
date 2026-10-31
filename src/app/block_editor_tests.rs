@@ -3795,6 +3795,47 @@ fn point_parameter_placement_cancel_at_both_prompts_is_inert() {
 }
 
 #[test]
+fn visibility_set_row_edits_the_existing_parameter_instead_of_refusing() {
+    let (mut app, reference) = fixture();
+    begin(&mut app, reference);
+    let i = app.active_tab;
+    let _ = app.run_command_line("BPARAMETER VISIBILITY 0,0");
+    assert!(
+        app.block_visibility.is_none(),
+        "placing the parameter does not open its dialog"
+    );
+    let before = app.tabs[i].scene.document.clone();
+    let depth = app.tabs[i].history.undo_stack.len();
+    let _ = app.dispatch_command("BPARAMETERSET Visibility Set");
+    assert!(
+        app.block_visibility.is_some(),
+        "the row on a definition that already has the parameter opens its states dialog"
+    );
+    assert_eq!(app.tabs[i].scene.document, before, "nothing is re-authored");
+    assert_eq!(app.tabs[i].history.undo_stack.len(), depth);
+    assert_eq!(
+        app.tabs[i].pending_parameter_set_follow_up,
+        None,
+        "the redirect leaves no follow-up waiting to run against a later placement"
+    );
+    let _ = app.update(crate::app::Message::CloseModal);
+    // A bare placement of a second visibility parameter is still the refusal
+    // the model requires; only the row redirects to the dialog.
+    let _ = app.run_command_line("BPARAMETER VISIBILITY 4,4");
+    assert_eq!(
+        app.command_line.last_error.as_deref(),
+        Some("This block already has a visibility parameter."),
+        "the refusal names the rule"
+    );
+    assert!(
+        app.block_visibility.is_none(),
+        "a refused placement opens nothing"
+    );
+    assert_eq!(app.tabs[i].scene.document, before);
+    assert_eq!(app.tabs[i].history.undo_stack.len(), depth);
+}
+
+#[test]
 fn point_parameter_placement_chooser_works_with_existing_visibility_and_reframes() {
     let (mut app, reference) = fixture();
     begin(&mut app, reference);
@@ -8381,3 +8422,4 @@ mod alignment_insertion;
 mod parameter_preview;
 
 mod lookup_expressions;
+mod lookup_set_row;

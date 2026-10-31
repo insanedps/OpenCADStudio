@@ -82,7 +82,7 @@ impl OpenCADStudio {
         self.refresh_properties();
         self.command_line.push_output(
             crate::t!(if kind == Kind::Lookup {
-                "Lookup parameter placed. Use BLOOKUPTABLE to edit its property table."
+                "Lookup parameter placed."
             } else {
                 "Basepoint parameter placed."
             })
