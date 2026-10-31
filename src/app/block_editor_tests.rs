@@ -8422,4 +8422,5 @@ mod alignment_insertion;
 mod parameter_preview;
 
 mod lookup_expressions;
+mod array_spacing_prompts;
 mod lookup_set_row;
