@@ -1024,8 +1024,6 @@ pub(super) struct OpenCADStudio {
     pub(crate) block_redefine_mode: u8,
     /// BLOCKNAVIGATE: the Libraries tab's start folder ("." for none).
     pub(crate) block_navigate: String,
-    /// INSNAME: the default block name for -INSERT (session only).
-    pub(crate) insname: String,
     /// Last time block-usage was flushed to disk (debounce per 2.4).
     #[cfg(not(target_arch = "wasm32"))]
     block_usage_last_persist: Option<std::time::Instant>,
@@ -5719,7 +5717,6 @@ impl OpenCADStudio {
             refedit_options: Default::default(),
             block_redefine_mode: 1,
             block_navigate: ".".to_string(),
-            insname: String::new(),
             #[cfg(not(target_arch = "wasm32"))]
             block_usage_last_persist: None,
             awaiting_vports: false,

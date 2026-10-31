@@ -1194,7 +1194,7 @@ impl OpenCADStudio {
     }
 
     pub(crate) fn record_block_insert(&mut self, name: &str) {
-        self.insname = name.to_string();
+        self.tabs[self.active_tab].insname = name.to_string();
         self.note_recent_block(name);
         let key = name.to_ascii_uppercase();
         *self.block_freq.entry(key).or_insert(0) += 1;
