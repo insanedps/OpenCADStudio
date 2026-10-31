@@ -522,11 +522,13 @@ impl OpenCADStudio {
                     .collect();
                 let existing_names = self.tabs[i].scene.custom_block_names();
                 let default_unit = self.tabs[i].scene.document.header.insertion_units;
+                let precision = self.tabs[i].scene.document.header.linear_unit_precision;
                 self.block_definition = Some(
                     crate::ui::window::block_definition::BlockDefinitionState::new(
                         existing_names,
                         handles,
                         default_unit,
+                        precision,
                     ),
                 );
                 self.active_modal = Some(crate::app::ModalKind::BlockDefinition);
@@ -540,9 +542,7 @@ impl OpenCADStudio {
                     .collect();
                 if parts.len() == 3 {
                     if let Some(state) = self.block_definition.as_mut() {
-                        state.base_point_x = format!("{:.4}", parts[0]);
-                        state.base_point_y = format!("{:.4}", parts[1]);
-                        state.base_point_z = format!("{:.4}", parts[2]);
+                        state.set_base_point(glam::DVec3::new(parts[0], parts[1], parts[2]));
                     }
                 }
                 self.tabs[i].active_cmd = None;
@@ -1820,6 +1820,60 @@ mod tests {
         assert_eq!(state.base_point_x, "2.50");
         assert_eq!(state.base_point_y, "7.13");
         assert_eq!(state.base_point_z, "0.00");
+    }
+
+    // The Block dialog prints its base point the same way the drawing does, and
+    // a point picked from the drawing lands in the same fields.
+    #[test]
+    fn block_dialog_prints_coordinates_at_the_drawing_precision() {
+        let mut app = fresh_app();
+        let i = app.active_tab;
+        app.tabs[i].scene.document.header.linear_unit_precision = 2;
+        app.tabs[i].scene.define_block_raw(
+            "PRE_BASE",
+            codec::Vector3::new(10.0, 5.0, 0.0),
+            vec![codec::EntityType::Line(codec::entities::Line::from_points(
+                codec::Vector3::new(10.0, 5.0, 0.0),
+                codec::Vector3::new(30.0, 5.0, 0.0),
+            ))],
+        );
+        let _ = app.run_command_line("BLOCK");
+        let state = app
+            .block_definition
+            .as_ref()
+            .expect("the dialog opens with the drawing's precision");
+        assert_eq!(state.base_point_x, "0.00", "bare zero at LUPREC 2");
+        let _ = app.dispatch_command("BLOCK_POINT_PICKED 2.5 7.126 0");
+        let state = app
+            .block_definition
+            .as_ref()
+            .expect("the dialog stays open");
+        assert_eq!(state.base_point_x, "2.50");
+        assert_eq!(state.base_point_y, "7.13");
+        assert_eq!(state.base_point_z, "0.00");
+        assert_eq!(
+            state.parse_base_point(),
+            glam::DVec3::new(2.5, 7.13, 0.0),
+            "the printed text reads back as the point it shows"
+        );
+
+        // Choosing an existing definition prefills from its base, printed the
+        // same way rather than at a fixed number of decimals.
+        let _ = app.update(crate::app::Message::BlockDefNameSelect(
+            "PRE_BASE".to_string(),
+        ));
+        let state = app
+            .block_definition
+            .as_ref()
+            .expect("the dialog stays open");
+        assert_eq!(state.base_point_x, "10.00");
+        assert_eq!(state.base_point_y, "5.00");
+        assert_eq!(state.base_point_z, "0.00");
+        assert_eq!(
+            state.parse_base_point(),
+            glam::DVec3::new(10.0, 5.0, 0.0),
+            "the prefilled base reads back exactly"
+        );
     }
 
     /// Run one command line and return only the command-line text it appended.

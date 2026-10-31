@@ -6798,7 +6798,8 @@ impl OpenCADStudio {
                     state.error_message = None;
                     state.confirm_redefine = None;
                     // Redefining an existing block starts from the base point
-                    // that definition already has (0.0000 for a new block).
+                    // that definition already has, printed at the drawing's
+                    // precision; a name that is not a definition starts at zero.
                     let base = crate::scene::render_graph::block_base_point(
                         &self.tabs[self.active_tab].scene.document,
                         &chosen,

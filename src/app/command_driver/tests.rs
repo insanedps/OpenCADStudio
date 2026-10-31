@@ -2199,13 +2199,14 @@ mod block_base_point_tests {
                 vec!["DEF_BASE".to_string()],
                 Vec::new(),
                 0,
+                4,
             ),
         );
         assert_eq!(
             app.block_definition
                 .as_ref()
                 .map(|s| s.base_point_y.as_str()),
-            Some("0"),
+            Some("0.0000"),
             "a new block starts at 0"
         );
 

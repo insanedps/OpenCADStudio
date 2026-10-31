@@ -7,6 +7,7 @@ use iced::widget::{button, column, combo_box, container, pick_list, row, text, t
 use iced::{Background, Border, Element, Fill, Length, Theme};
 
 use crate::app::Message;
+use crate::entities::common::{coordinate_text, parse_length};
 use crate::modules::draw::units;
 use crate::t;
 use crate::ui::style::form::{button_style, dialog_button, field_style, form_radio};
@@ -141,9 +142,9 @@ impl WblockState {
     }
 
     pub fn parse_base_point(&self) -> glam::DVec3 {
-        let x = crate::entities::common::parse_length(&self.base_point_x).unwrap_or(0.0);
-        let y = crate::entities::common::parse_length(&self.base_point_y).unwrap_or(0.0);
-        let z = crate::entities::common::parse_length(&self.base_point_z).unwrap_or(0.0);
+        let x = parse_length(&self.base_point_x).unwrap_or(0.0);
+        let y = parse_length(&self.base_point_y).unwrap_or(0.0);
+        let z = parse_length(&self.base_point_z).unwrap_or(0.0);
         glam::DVec3::new(x, y, z)
     }
 
@@ -164,13 +165,6 @@ fn platform_path(text: &str) -> String {
     } else {
         text.replace('\\', "/")
     }
-}
-
-/// A base-point coordinate at the drawing's decimal precision. The field is
-/// typed back, so it always prints a plain number a length parser accepts.
-fn coordinate_text(value: f64, precision: i16) -> String {
-    let precision = precision.clamp(0, 8) as usize;
-    crate::entities::common::without_negative_zero(format!("{:.*}", precision, value))
 }
 
 fn group<'a>(
