@@ -75,3 +75,26 @@ fn lookup_set_row_opens_the_table_of_the_parameter_it_placed() {
         "the table of the parameter the row just placed, not the older one"
     );
 }
+
+/// The editor's Actions tab offers the same table; with the action bars on it
+/// must reach the editor, not the command the bars refuse.
+#[test]
+fn actions_tab_lookup_tool_opens_the_table_with_the_action_bars_on() {
+    let (mut app, reference) = fixture();
+    begin(&mut app, reference);
+    let _ = app.dispatch_command("BACTIONBARMODE 1");
+    let _ = app.run_command_line("BPARAMETER LOOKUP 1,1");
+    let _ = app.update(Message::RibbonToolClick {
+        tool_id: "BLOOKUPTABLE".to_string(),
+        event: crate::modules::ModuleEvent::Command("BLOOKUPTABLE".to_string()),
+    });
+    assert!(
+        app.command_line.last_error.is_none(),
+        "the palette tool is not refused: {:?}",
+        app.command_line.last_error
+    );
+    assert!(
+        app.block_lookup.is_some(),
+        "the palette's Lookup tool opens the table editor"
+    );
+}
