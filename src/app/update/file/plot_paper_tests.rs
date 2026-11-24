@@ -1185,6 +1185,17 @@ fn changing_the_sheet_updates_the_printable_area() {
         ps.margins,
         document::objects::PaperMargin::new(0.0, 1.0, 0.0, 1.0)
     );
+    // A plain size pick keeps full bleed (keep_paper_variant); the sheet grows.
+    let _ = app.on_plot_dlg(PlotDlgMsg::Paper("ISO_A3_(297.00_x_420.00_MM)".into()));
+    let _ = app.on_plot_dlg(PlotDlgMsg::SetCurrent);
+    let ps = app.tabs[i].scene.plot_settings_for("Layout1").unwrap();
+    assert_eq!(ps.paper_size, "ISO_full_bleed_A3_(297.00_x_420.00_MM)");
+    assert_eq!(
+        ps.margins,
+        document::objects::PaperMargin::new(0.0, 1.0, 0.0, 1.0)
+    );
+    assert_eq!((ps.paper_width, ps.paper_height), (297.0, 420.0));
+    // Picking the plain entry at the same size switches to standard margins.
     let _ = app.on_plot_dlg(PlotDlgMsg::Paper("ISO_A3_(297.00_x_420.00_MM)".into()));
     let _ = app.on_plot_dlg(PlotDlgMsg::SetCurrent);
     let ps = app.tabs[i].scene.plot_settings_for("Layout1").unwrap();
@@ -1515,4 +1526,33 @@ fn direct_model_preview_keeps_an_explicit_non_fit_extents_scale() {
     assert_eq!(app.plot_dialog.scale, "1:100");
     assert!(!app.plot_dialog.center);
     assert_eq!(app.plot_dialog.offset_x, "12.0");
+}
+
+#[test]
+fn picking_another_size_keeps_the_sheet_variant() {
+    let mut app = OpenCADStudio::new_for_test();
+    app.automation_op(r#"{"op":"new"}"#);
+    let _ = app.update(Message::LayoutSwitch("Layout1".into()));
+    let _ = app.on_plot_dialog_open();
+    app.plot_dialog.printer_media = None;
+    let _ = app.on_plot_dlg(PlotDlgMsg::Paper(
+        "ISO_full_bleed_A1_(594.00_x_841.00_MM)".into(),
+    ));
+    // A plain size pick keeps full bleed.
+    let _ = app.on_plot_dlg(PlotDlgMsg::Paper("ISO_A3_(297.00_x_420.00_MM)".into()));
+    assert_eq!(app.plot_dialog.paper, "ISO_full_bleed_A3_(297.00_x_420.00_MM)");
+    let _ = app.on_plot_dlg(PlotDlgMsg::Paper("ISO_A1_(594.00_x_841.00_MM)".into()));
+    assert_eq!(
+        app.plot_dialog.paper,
+        "ISO_full_bleed_A1_(594.00_x_841.00_MM)"
+    );
+    // Changing only the variant at the same size is honoured.
+    let _ = app.on_plot_dlg(PlotDlgMsg::Paper("ISO_A1_(594.00_x_841.00_MM)".into()));
+    assert_eq!(app.plot_dialog.paper, "ISO_A1_(594.00_x_841.00_MM)");
+    // Another series has its own variants: no swap across series.
+    let _ = app.on_plot_dlg(PlotDlgMsg::Paper(
+        "ISO_expand_A3_(297.00_x_420.00_MM)".into(),
+    ));
+    let _ = app.on_plot_dlg(PlotDlgMsg::Paper("ANSI_B_(11.00_x_17.00_Inches)".into()));
+    assert_eq!(app.plot_dialog.paper, "ANSI_B_(11.00_x_17.00_Inches)");
 }
