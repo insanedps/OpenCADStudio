@@ -11869,6 +11869,25 @@ impl OpenCADStudio {
                     crate::ui::window::extraction_outdated::OutdatedChoice::SkipAll,
                 )
             }
+            // ✕ or Esc on the floating FILTER, Quick Select and Import
+            // layers windows close them as their Cancel does.
+            Message::CloseModal
+                if self.active_modal == Some(super::super::ModalKind::Filter) =>
+            {
+                self.on_filter_message(crate::app::filter_dialog::FilterMsg::Close)
+            }
+            Message::CloseModal
+                if self.active_modal == Some(super::super::ModalKind::QuickSelect) =>
+            {
+                self.update(Message::QSelectClose)
+            }
+            Message::CloseModal
+                if self.active_modal == Some(super::super::ModalKind::LayerImport) =>
+            {
+                self.update(Message::LayerImport(
+                    crate::app::layer_import::LayerImportMsg::Close,
+                ))
+            }
             Message::CloseModal => {
                 // Cancel or ✕ in the multiple-material window of a 3D Studio
                 // import stops the import at the asked mesh; the meshes

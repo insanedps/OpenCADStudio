@@ -27,6 +27,9 @@ impl OpenCADStudio {
     pub(crate) fn modal_title_for(&self, kind: super::super::ModalKind) -> String {
         use super::super::ModalKind as K;
         match Some(kind) {
+            Some(K::Filter) => self.filter_tool_title(),
+            Some(K::QuickSelect) => super::qselect_tool_title(self.transparent_select.as_deref()),
+            Some(K::LayerImport) => crate::t!("Import layers").into_owned(),
             Some(K::About) => crate::tr!("modal", "about"),
             Some(K::Shortcuts) => crate::tr!("modal", "keyboard-shortcuts"),
             Some(K::Aliases) => crate::tr!("modal", "command-aliases"),
@@ -213,6 +216,23 @@ impl OpenCADStudio {
         ex: iced::Vector,
     ) -> Option<Element<'s, Message>> {
         Some(match kind {
+            super::super::ModalKind::Filter => {
+                self.filter_tool_content(self.filter_dialog.as_ref()?, ex)
+            }
+            super::super::ModalKind::QuickSelect => {
+                let state = self.qselect.as_ref()?;
+                super::qselect_tool_content(
+                    state,
+                    self.transparent_select.as_deref(),
+                    &state.available_types,
+                    &state.available_properties,
+                    state.candidate_count,
+                    ex,
+                )
+            }
+            super::super::ModalKind::LayerImport => {
+                self.layer_import_tool_content(self.layer_import.as_ref()?, ex)
+            }
             super::super::ModalKind::StyleImport => sized_flow(ex, 540, 480, |flow| {
                 crate::ui::style::style_manager::import_view(
                     self.style_import

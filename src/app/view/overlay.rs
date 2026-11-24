@@ -2354,13 +2354,13 @@ const QSELECT_ANY_PROP: &str = "(Any property)";
 /// Quick Select uses the application's shared movable modal frame. Its form
 /// groups scope, filter, and result behavior while reusing the same compact
 /// field and button styles as the other workspace dialogs.
-pub(super) fn qselect_overlay<'a>(
+/// Quick Select's content in its tool window.
+pub(super) fn qselect_tool_content<'a>(
     state: &'a crate::app::QSelectState,
     transparent_for: Option<&'a str>,
     types: &[(String, usize)],
     properties: &[crate::app::QSelectPropertyChoice],
     candidate_count: usize,
-    modal_offset: iced::Vector,
     modal_resize: iced::Vector,
 ) -> Element<'a, Message> {
     let measurement = qselect_content(
@@ -2380,24 +2380,20 @@ pub(super) fn qselect_overlay<'a>(
         crate::ui::modal::ModalSizing::FILL,
     );
     // Long imported values must not make the natural dialog span the viewport.
-    let content = crate::ui::modal::intrinsic(
+    crate::ui::modal::intrinsic(
         measurement,
         content,
         iced::Size::new(480.0, f32::INFINITY),
         modal_resize,
-    );
-
-    crate::ui::modal::modal(
-        Space::new().width(Fill).height(Fill),
-        match transparent_for {
-            Some(command) => crate::tf!("Quick Select · for {}", command),
-            None => t!("Quick Select"),
-        },
-        content,
-        Message::QSelectClose,
-        modal_offset,
-        crate::ui::modal::ModalOptions::STANDARD,
     )
+}
+
+/// Quick Select's window title: who it works for.
+pub(super) fn qselect_tool_title(transparent_for: Option<&str>) -> String {
+    match transparent_for {
+        Some(command) => crate::tf!("Quick Select · for {}", command).to_string(),
+        None => t!("Quick Select").into_owned(),
+    }
 }
 
 /// Object type label for the selection filter; INSERT reads as a block reference.

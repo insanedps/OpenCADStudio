@@ -3017,33 +3017,31 @@ mod view {
 }
 
 impl OpenCADStudio {
-    /// The FILTER dialog in the shared movable modal frame.
-    pub(super) fn filter_overlay<'a>(
+    /// The FILTER dialog's content in its tool window (it floats: the
+    /// drawing and the Layer Manager stay usable behind it).
+    pub(super) fn filter_tool_content<'a>(
         &self,
         state: &'a FilterDialogState,
+        extra: iced::Vector,
     ) -> iced::Element<'a, Message> {
-        let measurement = view::content(state, crate::ui::modal::ModalSizing::INTRINSIC);
-        let content = view::content(state, crate::ui::modal::ModalSizing::FILL);
-        let content = crate::ui::modal::intrinsic(
-            measurement,
-            content,
+        crate::ui::modal::intrinsic(
+            view::content(state, crate::ui::modal::ModalSizing::INTRINSIC),
+            view::content(state, crate::ui::modal::ModalSizing::FILL),
             iced::Size::new(1000.0, f32::INFINITY),
-            self.modal_resize,
-        );
-        crate::ui::modal::modal(
-            iced::widget::Space::new()
-                .width(iced::Fill)
-                .height(iced::Fill),
-            match (&state.layer_filter, &state.for_command) {
-                (Some(_), _) => crate::t!("Layer Filter"),
-                // Who it works for (#2611 mockup, Transparent).
-                (None, Some(command)) => crate::tf!("Filter · for {}", command),
-                (None, None) => crate::t!("Filter"),
-            },
-            content,
-            Message::FilterDialog(FilterMsg::Close),
-            self.modal_offset,
-            crate::ui::modal::ModalOptions::STANDARD,
+            extra,
         )
+    }
+
+    /// The FILTER window's title: what it filters and who it works for.
+    pub(super) fn filter_tool_title(&self) -> String {
+        match self.filter_dialog.as_ref() {
+            Some(state) => match (&state.layer_filter, &state.for_command) {
+                (Some(_), _) => crate::t!("Layer Filter").into_owned(),
+                // Who it works for (#2611 mockup, Transparent).
+                (None, Some(command)) => crate::tf!("Filter · for {}", command).to_string(),
+                (None, None) => crate::t!("Filter").into_owned(),
+            },
+            None => crate::t!("Filter").into_owned(),
+        }
     }
 }

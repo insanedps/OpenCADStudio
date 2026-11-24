@@ -750,28 +750,17 @@ mod view {
 }
 
 impl OpenCADStudio {
-    /// The import dialog in the shared movable modal frame.
-    pub(super) fn layer_import_overlay<'a>(
+    /// The import dialog's content in its tool window.
+    pub(super) fn layer_import_tool_content<'a>(
         &self,
         state: &'a LayerImportState,
+        extra: iced::Vector,
     ) -> iced::Element<'a, Message> {
-        let measurement = view::content(state, crate::ui::modal::ModalSizing::INTRINSIC);
-        let content = view::content(state, crate::ui::modal::ModalSizing::FILL);
-        let content = crate::ui::modal::intrinsic(
-            measurement,
-            content,
+        crate::ui::modal::intrinsic(
+            view::content(state, crate::ui::modal::ModalSizing::INTRINSIC),
+            view::content(state, crate::ui::modal::ModalSizing::FILL),
             iced::Size::new(720.0, f32::INFINITY),
-            self.modal_resize,
-        );
-        crate::ui::modal::modal(
-            iced::widget::Space::new()
-                .width(iced::Fill)
-                .height(iced::Fill),
-            crate::t!("Import layers"),
-            content,
-            Message::LayerImport(LayerImportMsg::Close),
-            self.modal_offset,
-            crate::ui::modal::ModalOptions::STANDARD,
+            extra,
         )
     }
 }

@@ -313,6 +313,56 @@ impl OpenCADStudio {
         self.color_picker.is_none()
     }
 
+    /// Tools whose window follows a dialog state of their own (FILTER,
+    /// Quick Select, Import layers): it opens when the state does and goes
+    /// with it, however the dialog was opened or closed (a Cancel, a step
+    /// aside to pick in the drawing, a parked command coming back).
+    const STATE_TOOLS: [ModalKind; 3] = [
+        ModalKind::Filter,
+        ModalKind::QuickSelect,
+        ModalKind::LayerImport,
+    ];
+
+    fn state_tool_alive(&self, kind: ModalKind) -> bool {
+        match kind {
+            ModalKind::Filter => self.filter_dialog.is_some(),
+            ModalKind::QuickSelect => self.qselect.is_some(),
+            ModalKind::LayerImport => self.layer_import.is_some(),
+            _ => true,
+        }
+    }
+
+    fn sync_state_tools(&mut self) {
+        if self
+            .active_modal
+            .is_some_and(|kind| !self.state_tool_alive(kind))
+        {
+            self.active_modal = None;
+        }
+        let alive = Self::STATE_TOOLS.map(|kind| self.state_tool_alive(kind));
+        self.tool_windows.retain(|tool| {
+            Self::STATE_TOOLS
+                .iter()
+                .position(|kind| *kind == tool.kind)
+                .is_none_or(|at| alive[at])
+        });
+        for kind in Self::STATE_TOOLS {
+            if self.state_tool_alive(kind)
+                && self.active_modal != Some(kind)
+                && !self.tool_open(kind)
+            {
+                if self.active_modal.is_some() {
+                    if !self.tool_parkable() {
+                        continue;
+                    }
+                    self.park_active_tool();
+                }
+                self.active_modal = Some(kind);
+                self.park_active_tool();
+            }
+        }
+    }
+
     /// Whether a tool dialog of `kind` is open, active or parked.
     pub(crate) fn tool_open(&self, kind: ModalKind) -> bool {
         self.tool_windows.iter().any(|tool| tool.kind == kind)
@@ -441,6 +491,7 @@ impl OpenCADStudio {
         {
             self.close_document_tools(tab);
         }
+        self.sync_state_tools();
         if self.active_modal.is_some() && self.tool_parkable() {
             self.park_active_tool();
         }
@@ -1212,7 +1263,16 @@ impl OpenCADStudio {
                 // it: the remembered placement can be wider than the window
                 // (#3019), which hid the table's last columns with no scroll.
                 let body = iced::widget::responsive(move |size| {
-                    self.panel_body(panel, size.width, true, tab)
+                    // PERF: what a pallet window's rebuild costs (every
+                    // update rebuilds every window, pointer moves included).
+                    let started = crate::perf::enabled().then(iced::time::Instant::now);
+                    let body = self.panel_body(panel, size.width, true, tab);
+                    crate::perf_record!(
+                        "[perf] os-panel {:?} build={:.2}ms",
+                        panel,
+                        crate::perf::elapsed_ms(started)
+                    );
+                    body
                 });
                 column![header, body].into()
             }

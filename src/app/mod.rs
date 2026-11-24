@@ -2568,6 +2568,12 @@ pub enum ContextMenuEditMsg {
 /// modal's ✕ (`Message::CloseModal`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ModalKind {
+    /// FILTER (and the Layer Manager's Layer Filter): a floating window.
+    Filter,
+    /// QSELECT's Quick Select: a floating window.
+    QuickSelect,
+    /// The Layer Manager's Import layers: a floating window.
+    LayerImport,
     About,
     Shortcuts,
     PluginManager,

@@ -56,11 +56,7 @@ impl OpenCADStudio {
         }
         // A dialog owns the keyboard: typing while one is open (an open list
         // in it included) must not land in the command line behind it.
-        if self.active_modal.is_some()
-            || self.qselect.is_some()
-            || self.filter_dialog.is_some()
-            || self.layer_import.is_some()
-        {
+        if self.active_modal.is_some() {
             return Task::none();
         }
         // Filter out control characters — only push the typed
@@ -656,14 +652,6 @@ impl OpenCADStudio {
         }
         // Cancel layout rename first, then fall through.
         let i_e = self.active_tab;
-        // Quick Select and FILTER close as their Cancel does: the preview
-        // goes and a parked 'QSELECT / 'FILTER command comes back.
-        if self.qselect.is_some() {
-            return self.update(Message::QSelectClose);
-        }
-        if self.filter_dialog.is_some() {
-            return self.on_filter_message(crate::app::filter_dialog::FilterMsg::Close);
-        }
         {
             let mut sel = self.tabs[i_e].scene.selection.borrow_mut();
             if sel.menu.open_at.is_some() {

@@ -307,7 +307,7 @@ mod viewcube;
 use controls::{dyn_component_value, viewport_controls, VP_INSET};
 use overlay::{
     mtext_editor_overlay, position_canvas_overlay, position_canvas_overlay_near_cursor,
-    qselect_overlay, text_inline_overlay, viewport_context_menu_overlay, viewport_quad_overlay,
+    qselect_tool_content, qselect_tool_title, text_inline_overlay, viewport_context_menu_overlay, viewport_quad_overlay,
 };
 use viewcube::{viewcube_nav_controls, viewcube_ucs_picker, UCS_PICKER_W};
 
@@ -3848,28 +3848,6 @@ bg={bg_ms:.1}ms n={view_count}"
             iced::widget::Space::new().width(0).height(0).into()
         };
 
-        let filter_layer: Element<'_, Message> = match &self.filter_dialog {
-            Some(state) => self.filter_overlay(state),
-            None => iced::widget::Space::new().width(0).height(0).into(),
-        };
-        let layer_import_layer: Element<'_, Message> = match &self.layer_import {
-            Some(state) => self.layer_import_overlay(state),
-            None => iced::widget::Space::new().width(0).height(0).into(),
-        };
-        let qselect_layer: Element<'_, Message> = if let Some(state) = &self.qselect {
-            qselect_overlay(
-                state,
-                self.transparent_select.as_deref(),
-                &state.available_types,
-                &state.available_properties,
-                state.candidate_count,
-                self.modal_offset,
-                self.modal_resize,
-            )
-        } else {
-            iced::widget::Space::new().width(0).height(0).into()
-        };
-
         let open_progress_layer: Element<'_, Message> = if let Some(p) = self
             .opening
             .as_ref()
@@ -3946,9 +3924,6 @@ bg={bg_ms:.1}ms n={view_count}"
             dropdown_layer,
             search_layer,
             ribbon_menu_layer,
-            qselect_layer,
-            filter_layer,
-            layer_import_layer,
             snap_override_layer,
             open_progress_layer,
             keytip_layer,

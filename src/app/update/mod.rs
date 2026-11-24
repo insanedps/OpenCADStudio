@@ -249,6 +249,20 @@ impl OpenCADStudio {
         if self.active_modal == Some(IfcPlan) {
             self.import_dialogs.ifc_plan = None;
         }
+        // The floating FILTER, Quick Select and Import layers windows close
+        // with their drawing (their ✕ and Esc go through their own Cancel).
+        if self.active_modal == Some(Filter) && self.filter_dialog.take().is_some() {
+            self.filter_refresh_live();
+        }
+        if self.active_modal == Some(QuickSelect) {
+            self.qselect_clear_preview();
+            if let Some(state) = self.qselect.take() {
+                self.qselect_settings = Some((&state).into());
+            }
+        }
+        if self.active_modal == Some(LayerImport) {
+            self.layer_import = None;
+        }
         if self.active_modal == Some(BlockEditorSettings) {
             self.block_editor_settings = None;
         }
