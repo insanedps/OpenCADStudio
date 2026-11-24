@@ -983,6 +983,13 @@ impl OpenCADStudio {
     }
 
     pub(crate) fn os_window_moved(&mut self, id: iced::window::Id, at: Point) {
+        if self.main_window == Some(id) {
+            // Minimizing parks the window off screen: keep where it was.
+            if at.x > -10000.0 && at.y > -10000.0 {
+                *MAIN_WINDOW_AT.lock().unwrap_or_else(|e| e.into_inner()) = Some(at);
+            }
+            return;
+        }
         if let Some(window) = self.os_windows.iter_mut().find(|window| window.id == id) {
             if window.placing {
                 // The window's own move to its place is still to come.
@@ -1146,6 +1153,16 @@ impl OpenCADStudio {
                         h,
                     }
                 });
+            // A dialog without a place of its own, and every prompt (save on
+            // exit and the like), comes up over the main window.
+            let placement = if kind.fixed_size()
+                || !placement.x.is_finite()
+                || !placement.y.is_finite()
+            {
+                centred_over_main(placement, self.win_size)
+            } else {
+                placement
+            };
             // A dialog opened from another dialog's window comes up in front
             // of it, not behind the window that was clicked (#2750).
             let (id, open) = open_window(
@@ -1349,6 +1366,29 @@ pub(crate) fn float_os_windows(
         .fold(Task::none(), |task, id| {
             task.chain(iced::window::set_level(id, level))
         })
+}
+
+/// Where the main window was last moved to (logical, its top-left corner).
+#[cfg(not(target_arch = "wasm32"))]
+static MAIN_WINDOW_AT: std::sync::Mutex<Option<Point>> = std::sync::Mutex::new(None);
+
+/// `placement` centred over the main window (`main` = its logical size), so
+/// a dialog comes up on the monitor the app is on, not on the primary one
+/// (`Position::Centered`). Unchanged while the main window's place is unknown.
+#[cfg(not(target_arch = "wasm32"))]
+fn centred_over_main(placement: WindowPlacement, main: (f32, f32)) -> WindowPlacement {
+    let at = *MAIN_WINDOW_AT.lock().unwrap_or_else(|e| e.into_inner());
+    match at {
+        Some(at) if main.0 > 0.0 && main.1 > 0.0 => {
+            let scale = crate::ui::icons::scale_factor();
+            WindowPlacement {
+                x: (at.x + ((main.0 - placement.w) / 2.0).max(0.0)) * scale,
+                y: (at.y + ((main.1 - placement.h) / 2.0).max(0.0)) * scale,
+                ..placement
+            }
+        }
+        _ => placement,
+    }
 }
 
 /// Open a window of its own at `placement` (centred when it has no place).

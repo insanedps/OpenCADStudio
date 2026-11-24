@@ -446,7 +446,8 @@ pub(crate) fn window_event_with_context(
             Some(Message::OsWindowResized(win_id, sz.width, sz.height))
         }
         #[cfg(not(target_arch = "wasm32"))]
-        iced::Event::Window(window::Event::Moved(at)) if !is_main => {
+        // The main window's moves too: dialogs open over it (`os_window_moved`).
+        iced::Event::Window(window::Event::Moved(at)) => {
             Some(Message::OsWindowMoved(win_id, at))
         }
         // Keys typed in a window of its own stay with its widgets; only Esc,
