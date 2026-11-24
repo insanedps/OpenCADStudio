@@ -150,8 +150,8 @@ block2 = "0.5"
 objc2-foundation = { version = "0.2", features = ["NSArray", "NSURL", "NSString", "NSObject", "NSNotification", "NSThread", "NSEnumerator"] }
 
 [patch.crates-io]
-iced_core = { git = "https://github.com/HakanSeven12/iced.git", rev = "7dea84044e22dca45a2934f95c77bc8bb07c4707" }
-iced_widget = { git = "https://github.com/HakanSeven12/iced.git", rev = "7dea84044e22dca45a2934f95c77bc8bb07c4707" }
+iced_core = { path = "C:/dev/iced-redraw/core" }
+iced_widget = { path = "C:/dev/iced-redraw/widget" }
 
 # The pinned iced revision plus upstream 478c363df: a mesh clipped out of its
 # layer did not advance the index offset, so every later mesh in that layer
@@ -160,20 +160,20 @@ iced_widget = { git = "https://github.com/HakanSeven12/iced.git", rev = "7dea840
 # event loop no longer spins on a stale redraw deadline (#3418). Drop when iced
 # is bumped past both.
 [patch."https://github.com/iced-rs/iced.git"]
-iced = { git = "https://github.com/HakanSeven12/iced.git", rev = "7dea84044e22dca45a2934f95c77bc8bb07c4707" }
-iced_core = { git = "https://github.com/HakanSeven12/iced.git", rev = "7dea84044e22dca45a2934f95c77bc8bb07c4707" }
-iced_debug = { git = "https://github.com/HakanSeven12/iced.git", rev = "7dea84044e22dca45a2934f95c77bc8bb07c4707" }
-iced_futures = { git = "https://github.com/HakanSeven12/iced.git", rev = "7dea84044e22dca45a2934f95c77bc8bb07c4707" }
-iced_graphics = { git = "https://github.com/HakanSeven12/iced.git", rev = "7dea84044e22dca45a2934f95c77bc8bb07c4707" }
-iced_program = { git = "https://github.com/HakanSeven12/iced.git", rev = "7dea84044e22dca45a2934f95c77bc8bb07c4707" }
-iced_renderer = { git = "https://github.com/HakanSeven12/iced.git", rev = "7dea84044e22dca45a2934f95c77bc8bb07c4707" }
-iced_runtime = { git = "https://github.com/HakanSeven12/iced.git", rev = "7dea84044e22dca45a2934f95c77bc8bb07c4707" }
-iced_selector = { git = "https://github.com/HakanSeven12/iced.git", rev = "7dea84044e22dca45a2934f95c77bc8bb07c4707" }
-iced_test = { git = "https://github.com/HakanSeven12/iced.git", rev = "7dea84044e22dca45a2934f95c77bc8bb07c4707" }
-iced_tiny_skia = { git = "https://github.com/HakanSeven12/iced.git", rev = "7dea84044e22dca45a2934f95c77bc8bb07c4707" }
-iced_wgpu = { git = "https://github.com/HakanSeven12/iced.git", rev = "7dea84044e22dca45a2934f95c77bc8bb07c4707" }
-iced_widget = { git = "https://github.com/HakanSeven12/iced.git", rev = "7dea84044e22dca45a2934f95c77bc8bb07c4707" }
-iced_winit = { git = "https://github.com/HakanSeven12/iced.git", rev = "7dea84044e22dca45a2934f95c77bc8bb07c4707" }
+iced = { path = "C:/dev/iced-redraw" }
+iced_core = { path = "C:/dev/iced-redraw/core" }
+iced_debug = { path = "C:/dev/iced-redraw/debug" }
+iced_futures = { path = "C:/dev/iced-redraw/futures" }
+iced_graphics = { path = "C:/dev/iced-redraw/graphics" }
+iced_program = { path = "C:/dev/iced-redraw/program" }
+iced_renderer = { path = "C:/dev/iced-redraw/renderer" }
+iced_runtime = { path = "C:/dev/iced-redraw/runtime" }
+iced_selector = { path = "C:/dev/iced-redraw/selector" }
+iced_test = { path = "C:/dev/iced-redraw/test" }
+iced_tiny_skia = { path = "C:/dev/iced-redraw/tiny_skia" }
+iced_wgpu = { path = "C:/dev/iced-redraw/wgpu" }
+iced_widget = { path = "C:/dev/iced-redraw/widget" }
+iced_winit = { path = "C:/dev/iced-redraw/winit" }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 mimalloc = { version = "0.1", default-features = false }
