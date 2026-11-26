@@ -39,8 +39,16 @@ pub fn describe_condition(condition: &Condition, labels: &Labels) -> String {
     let property_part = condition
         .property
         .as_deref()
-        .filter(|_| condition.op != Op::Any)
         .map(|property| {
+            if condition.op == Op::Any {
+                // A property with "* Any value" matches every value: name the
+                // property, not "(Any type)", which means nothing for layers.
+                return format!(
+                    "{} {}",
+                    (labels.property_label)(property),
+                    crate::t!("* Any value")
+                );
+            }
             format!(
                 "{} {} {}",
                 (labels.property_label)(property),
@@ -130,5 +138,22 @@ mod tests {
             describe(&filter, &labels),
             "Layer = FAL* and (Line or Polyline) and not Linetype = HIDDEN"
         );
+    }
+
+    /// Finding 151: a layer condition "Color * Any value" reads as the
+    /// property it names, not as "(Any type)".
+    #[test]
+    fn an_any_value_condition_names_its_property() {
+        let filter = Filter {
+            root: Match::All,
+            items: vec![Item::Condition(cond(None, Some("color"), Op::Any, "", false))],
+        };
+        let type_label = |t: &str| t.to_string();
+        let property_label = |_: &str| "Color".to_string();
+        let labels = Labels {
+            type_label: &type_label,
+            property_label: &property_label,
+        };
+        assert_eq!(describe(&filter, &labels), "Color * Any value");
     }
 }

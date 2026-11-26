@@ -118,4 +118,65 @@ fn hatchedit_picks_a_hatch_by_its_fill() {
     click(&mut app, cursor);
     assert_eq!(picking(&app), Some(("HATCHEDIT", false)), "hatch picked");
 }
+
+/// Finding 155 probe: MATCHPROP from one hatch to another by clicking their
+/// fills, as a user does. The target takes the source's pattern settings.
+#[test]
+fn matchprop_by_clicks_copies_a_hatch_pattern_to_another_hatch() {
+    let (mut app, target, target_at, _) = app_with_hatch();
+    let i = app.active_tab;
+    let mut source = Hatch::new();
+    source.is_solid = false;
+    source.pattern_scale = 3.0;
+    source.pattern_angle = 0.7;
+    let mut path = BoundaryPath::new();
+    path.add_edge(BoundaryEdge::Polyline(PolylineEdge::new(
+        [[20.0, 0.0], [30.0, 0.0], [30.0, 10.0], [20.0, 10.0]]
+            .into_iter()
+            .map(|p| Vector2::new(p[0], p[1]))
+            .collect(),
+        true,
+    )));
+    source.paths.push(path);
+    let source = app.tabs[i]
+        .scene
+        .add_entity(document::EntityType::Hatch(Box::new(source)));
+    app.tabs[i].scene.camera.borrow_mut().fit_to_bounds_f64(
+        glam::DVec3::new(-5.0, -5.0, 0.0),
+        glam::DVec3::new(35.0, 15.0, 0.0),
+        800.0 / 600.0,
+    );
+    let tile = app.tabs[i].scene.active_model_tile_bounds(800.0, 600.0);
+    let bounds = iced::Rectangle { x: 0.0, y: 0.0, width: tile.width, height: tile.height };
+    let at = |app: &OpenCADStudio, x: f64, y: f64| {
+        let p = app.tabs[i]
+            .scene
+            .camera
+            .borrow()
+            .project(glam::DVec3::new(x, y, 0.0), bounds)
+            .unwrap();
+        iced::Point::new(tile.x + p.x, tile.y + p.y)
+    };
+    let _ = target_at;
+    let source_at = at(&app, 25.0, 5.0);
+    let target_at = at(&app, 5.0, 5.0);
+    let started = app.automation_op(r#"{"op":"run","cmd":"MATCHPROP"}"#);
+    assert_eq!(started["status"], "waiting_input", "{started}");
+    click(&mut app, source_at);
+    assert_eq!(
+        app.tabs[i].active_cmd.as_ref().map(|c| c.name()),
+        Some("MATCHPROP"),
+        "still matching after the source pick"
+    );
+    click(&mut app, target_at);
+    let _ = app.update(Message::CommandSubmit);
+    let _ = source;
+    let Some(document::EntityType::Hatch(h)) = app.tabs[i].scene.document.get_entity(target)
+    else {
+        panic!("target hatch gone");
+    };
+    assert!(!h.is_solid, "target still solid");
+    assert!((h.pattern_scale - 3.0).abs() < 1e-9, "scale {}", h.pattern_scale);
+    assert!((h.pattern_angle - 0.7).abs() < 1e-9, "angle {}", h.pattern_angle);
+}
 }

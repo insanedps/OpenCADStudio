@@ -1559,7 +1559,7 @@ impl OpenCADStudio {
             // rubber-band current for every event, but cap this expensive
             // preview pass at 60 Hz. Click and settled-dwell paths still run
             // the authoritative full snap at the exact pointer position.
-            let discrete_preview_enabled = self.snapper.has_discrete_preview_enabled();
+            let discrete_preview_enabled = self.snapper.has_live_preview_enabled();
             let run_discrete_preview = discrete_preview_enabled
                 && self
                     .snap_dwell
@@ -1591,6 +1591,7 @@ impl OpenCADStudio {
                 } else {
                     self.tabs[i].scene.hit_test_wires()
                 };
+                let nearest_wires = all_wires.clone();
                 let candidate_started = crate::perf::enabled().then(Instant::now);
                 let snap_candidates = self.tabs[i].scene.interaction_snap_preview_candidates_near(
                     all_wires,
@@ -1610,6 +1611,31 @@ impl OpenCADStudio {
                     bounds,
                     self.tabs[i].snap_result,
                 );
+                // Nearest is continuous, so the discrete candidates above carry
+                // no segments for it. Query the cursor's neighbourhood with
+                // segments only when Nearest is on; without this the point
+                // jumped between cursor and object on every slow move.
+                let snap = if self.snapper.is_on(crate::snap::SnapType::Nearest) {
+                    let near_candidates = self.tabs[i].scene.interaction_candidates_near(
+                        nearest_wires,
+                        cursor_world,
+                        view_rot,
+                        eye,
+                        bounds,
+                        self.snapper.osnap_radius_px,
+                    );
+                    let near = self.snapper.snap_nearest_preview(
+                        cursor_world,
+                        p,
+                        &near_candidates,
+                        view_rot,
+                        eye,
+                        bounds,
+                    );
+                    crate::snap::merge_snap(snap, near, p)
+                } else {
+                    snap
+                };
                 // Feed live point candidates into the OTRACK acquisition
                 // timer even while the expensive full snap pass is deferred.
                 // Previously the 250ms clock often started only after the
