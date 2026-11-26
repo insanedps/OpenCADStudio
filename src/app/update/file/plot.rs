@@ -93,6 +93,42 @@ pub(crate) fn plot_dialog_paper(
     }
 }
 
+/// The sheet to store for a picker selection. A plain (standard) pick of
+/// another size from the same series keeps the current full bleed / expand
+/// variant, so A1 full bleed → A3 → A1 lands on full bleed again instead of
+/// silently switching to standard margins and shifting the layout. A full
+/// bleed or expand entry, or a pick that changes only the variant, is honoured
+/// as picked. Printer media lists are taken as is.
+fn keep_paper_variant(d: &crate::ui::window::plot::PlotDialogState, picked: String) -> String {
+    use crate::io::paper_catalog::{catalog, resolve, PaperVariant};
+    if !d.to_file && d.printer_media.is_some() {
+        return picked;
+    }
+    let current = plot_dialog_paper(d);
+    let Some(new) = resolve(&picked) else {
+        return picked;
+    };
+    let same_size =
+        |a: (f64, f64), b: (f64, f64)| (a.0 - b.0).abs() < 0.01 && (a.1 - b.1).abs() < 0.01;
+    if new.variant != PaperVariant::Standard
+        || new.series != current.series
+        || new.variant == current.variant
+        || same_size(new.portrait_mm(), current.portrait_mm())
+    {
+        return picked;
+    }
+    catalog()
+        .iter()
+        .find(|p| {
+            p.series == new.series
+                && p.variant == current.variant
+                && p.units == new.units
+                && same_size(p.portrait_mm(), new.portrait_mm())
+        })
+        .map(|p| p.canonical.to_string())
+        .unwrap_or(picked)
+}
+
 pub(crate) fn plot_dialog_sheet_mm(d: &crate::ui::window::plot::PlotDialogState) -> (f64, f64) {
     plot_dialog_paper(d).sheet_mm(plot_dialog_orientation(d))
 }
@@ -2890,7 +2926,7 @@ impl OpenCADStudio {
                 Task::none()
             }
             M::Paper(s) => {
-                self.plot_dialog.paper = s;
+                self.plot_dialog.paper = keep_paper_variant(&self.plot_dialog, s);
                 let (w, h) = plot_dialog_sheet_mm(&self.plot_dialog);
                 self.plot_dialog.paper_width_mm = w;
                 self.plot_dialog.paper_height_mm = h;
