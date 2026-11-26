@@ -929,3 +929,61 @@ fn a_pan_release_puts_the_drawing_feedback_back_under_the_cursor() {
         "the rubber band ends under the cursor {to:?}, not at {end:?}"
     );
 }
+
+#[test]
+fn nearest_holds_on_the_live_pass_while_moving_along_a_line() {
+    use document::{entities::Line, types::Vector3, EntityType};
+    let mut app = drawing_app("LINE");
+    let i = app.active_tab;
+    app.tabs[i].scene.add_entity(EntityType::Line(Line::from_points(
+        Vector3::new(5.0, 10.0, 0.0),
+        Vector3::new(40.0, 10.0, 0.0),
+    )));
+    app.snapper.snap_enabled = true;
+    app.snapper.enabled = [crate::snap::SnapType::Endpoint, crate::snap::SnapType::Nearest]
+        .into_iter()
+        .collect();
+    // The first move has no dwell yet and takes the full pass; the rest are live passes.
+    app.snap_dwell = None;
+    for x in [12.0, 14.0, 16.0, 18.0, 20.0] {
+        if let Some(dwell) = app.snap_dwell.as_mut() {
+            dwell.last_preview_snap_at = Instant::now() - std::time::Duration::from_millis(50);
+        }
+        let mut at = screen(&app, glam::DVec3::new(x, 10.0, 0.0));
+        at.y += 3.0;
+        move_to(&mut app, at);
+        let hit = app.tabs[i].snap_result.expect("a Nearest snap on every move");
+        assert_eq!(hit.snap_type, crate::snap::SnapType::Nearest, "x {x}");
+        let world = app.tabs[i].last_cursor_world;
+        assert!((world.y - 10.0).abs() < 1e-6, "x {x}: the point left the line ({world:?})");
+    }
+}
+
+/// Finding 152: a drawing command's rubber band is drawn at the current
+/// lineweight (here 0.50 mm), as the object is once added, not hairline.
+#[test]
+fn drawing_preview_takes_the_current_lineweight() {
+    use document::types::LineWeight;
+    let mut app = drawing_app("LINE");
+    let i = app.active_tab;
+    app.tabs[i].scene.document.header.current_line_weight = 50;
+    let want = crate::scene::view::render::lineweight_to_px(&LineWeight::from_value(50));
+    assert!(want > 1.5, "0.50 mm is wider than a hairline: {want}");
+    let at = screen(&app, glam::DVec3::new(40.0, 30.0, 0.0));
+    let _ = app.update(Message::ViewportLeftPressAt(at));
+    for x in [70.0, 80.0] {
+        let at = screen(&app, glam::DVec3::new(x, 50.0, 0.0));
+        move_to(&mut app, at);
+        let _ = app.on_snap_dwell_tick();
+    }
+    let weights: Vec<f32> = app.tabs[i]
+        .scene
+        .preview_wires
+        .iter()
+        .map(|wire| wire.line_weight_px)
+        .collect();
+    assert!(
+        weights.iter().any(|w| (w - want).abs() < 1e-3),
+        "preview weights {weights:?}, want {want}"
+    );
+}

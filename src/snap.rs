@@ -1507,6 +1507,78 @@ impl Snapper {
         self.snap_discrete_preview_stable(cursor_screen, wires, view_rot, eye, bounds, None)
     }
 
+    /// Whether the live rubber-band pass has anything to resolve: a discrete
+    /// mode, or Nearest. Nearest left only to the settled pass made the point
+    /// jump between the cursor (moving) and the object (paused) on every slow
+    /// move along it.
+    pub fn has_live_preview_enabled(&self) -> bool {
+        self.has_discrete_preview_enabled() || (self.snap_enabled && self.is_on(SnapType::Nearest))
+    }
+
+    /// Live Nearest: the closest point on the segments of `wires` (the
+    /// cursor's neighbourhood) inside the aperture, as the settled pass finds it.
+    pub fn snap_nearest_preview<W: WireSource + ?Sized>(
+        &self,
+        cursor_world: DVec3,
+        cursor_screen: Point,
+        wires: &W,
+        view_rot: Mat4,
+        eye: DVec3,
+        bounds: Rectangle,
+    ) -> Option<SnapResult> {
+        if !(self.snap_enabled && self.is_on(SnapType::Nearest)) {
+            return None;
+        }
+        let radius2 = self.osnap_radius_px * self.osnap_radius_px;
+        let mut best: Option<(SnapResult, f32)> = None;
+        let mut try_pt = |world: DVec3, src: Option<DimensionAssociationSource>| {
+            let screen = world_to_screen(world, view_rot, eye, bounds);
+            if !(screen.x >= 0.0 && screen.x <= bounds.width && screen.y >= 0.0 && screen.y <= bounds.height) {
+                return;
+            }
+            let d2 = dist2(screen, cursor_screen);
+            if !(d2 < radius2) || self.skipped_in_cycle(world, SnapType::Nearest) {
+                return;
+            }
+            if best.as_ref().is_some_and(|(_, b)| *b <= d2) {
+                return;
+            }
+            best = Some((
+                SnapResult {
+                    world,
+                    screen,
+                    snap_type: SnapType::Nearest,
+                    tangent_obj: None,
+                    extension_base: None,
+                    extension_base2: None,
+                    extension_origin: None,
+                    extension_dir: None,
+                    viewport: None,
+                    source: src,
+                    secondary_source: None,
+                    model_point: None,
+                },
+                d2,
+            ));
+        };
+        if let Some(segments) = indexed_segments(wires) {
+            for seg in segments {
+                try_pt(
+                    nearest_on_segment(cursor_world, seg.a, seg.b),
+                    wires.source_wire(seg.wire).and_then(wire_source),
+                );
+            }
+        } else {
+            for wire in wires.iter() {
+                let src = wire_source(wire);
+                for i in 0..wire.points.len().saturating_sub(1) {
+                    try_pt(nearest_on_segment(cursor_world, wp_f64(wire, i), wp_f64(wire, i + 1)), src);
+                }
+            }
+        }
+        best.map(|(hit, _)| hit)
+    }
+
     /// Keep an acquired discrete point only while it is independently found
     /// among this frame's *real* candidates. Hysteresis avoids oscillation
     /// between nearly equidistant block vertices without phantom old snaps.

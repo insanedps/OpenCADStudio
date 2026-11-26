@@ -9,6 +9,11 @@
 //! here, the drop-down gets a viewport reaching from the window corner to the
 //! visible area's far edges: the test then trips only where the list really
 //! leaves the visible area.
+//!
+//! The list itself opens against the window, not the scroll area: below the
+//! field when it fits there, else above when that fits, else on the larger
+//! side, cut to it. A list in a small window (Layer Manager colour cells)
+//! was clipped by the scroll area's bottom or flipped over its own field.
 
 use iced::advanced::layout::{self, Layout};
 use iced::advanced::widget::{self, tree, Tree, Widget};
@@ -131,13 +136,16 @@ impl Widget<Message, Theme, Renderer> for DropDownFit<'_> {
         viewport: &Rectangle,
         translation: Vector,
     ) -> Option<overlay::Element<'b, Message, Theme, Renderer>> {
+        // No vertical flip inside the drop-down: FitOverlay picks the side.
         let from_corner = Rectangle {
             x: 0.0,
             y: 0.0,
             width: viewport.x + viewport.width,
-            height: viewport.y + viewport.height,
+            height: f32::MAX,
         };
         let start_x = self.start.then(|| layout.bounds().x + translation.x);
+        let field_top = layout.bounds().y + translation.y;
+        let field_bottom = field_top + layout.bounds().height;
         let inner = self.content.as_widget_mut().overlay(
             tree,
             layout,
@@ -148,6 +156,8 @@ impl Widget<Message, Theme, Renderer> for DropDownFit<'_> {
         Some(overlay::Element::new(Box::new(FitOverlay {
             inner,
             start_x,
+            field_top,
+            field_bottom,
         })))
     }
 }
@@ -156,11 +166,38 @@ struct FitOverlay<'a> {
     inner: overlay::Element<'a, Message, Theme, Renderer>,
     /// Where the list starts when it starts at its field's left edge.
     start_x: Option<f32>,
+    /// The field's top and bottom edge in window coordinates.
+    field_top: f32,
+    field_bottom: f32,
+}
+
+/// The list's gap to its field (the drop-downs here use `.offset(2.0)`).
+const GAP: f32 = 2.0;
+
+/// Which side of the field a list of natural height `wanted` opens on, given
+/// the window room `above` and `below` it: below when it fits, else above when
+/// that fits, else the larger side. `true` = above.
+fn opens_above(wanted: f32, above: f32, below: f32) -> bool {
+    wanted > below && (wanted <= above || above > below)
 }
 
 impl overlay::Overlay<Message, Theme, Renderer> for FitOverlay<'_> {
     fn layout(&mut self, renderer: &Renderer, bounds: Size) -> layout::Node {
-        let node = self.inner.as_overlay_mut().layout(renderer, bounds);
+        let below = (bounds.height - self.field_bottom - GAP).max(0.0);
+        let above = (self.field_top - GAP).max(0.0);
+        // The list's natural height: laid out with room to spare below.
+        let tall = Size::new(bounds.width, self.field_bottom + GAP + bounds.height.max(1.0) * 4.0);
+        let wanted = self.inner.as_overlay_mut().layout(renderer, tall).bounds().height;
+        let node = if opens_above(wanted, above, below) {
+            // Lay out with exactly `above` of room below the field, then move it up.
+            let fake = Size::new(bounds.width, self.field_bottom + GAP + above);
+            let node = self.inner.as_overlay_mut().layout(renderer, fake);
+            let h = node.bounds().height;
+            let x = node.bounds().x;
+            node.move_to(iced::Point::new(x, (self.field_top - GAP - h).max(0.0)))
+        } else {
+            self.inner.as_overlay_mut().layout(renderer, bounds)
+        };
         match self.start_x {
             Some(x) => {
                 let placed = node.bounds();
@@ -227,5 +264,18 @@ impl overlay::Overlay<Message, Theme, Renderer> for FitOverlay<'_> {
         self.inner
             .as_overlay_mut()
             .operate(layout, renderer, operation);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::opens_above;
+
+    #[test]
+    fn list_opens_below_when_it_fits_else_above_else_on_the_larger_side() {
+        assert!(!opens_above(200.0, 500.0, 250.0), "fits below");
+        assert!(opens_above(200.0, 300.0, 120.0), "fits only above");
+        assert!(opens_above(400.0, 300.0, 120.0), "fits nowhere, more room above");
+        assert!(!opens_above(400.0, 100.0, 300.0), "fits nowhere, more room below");
     }
 }

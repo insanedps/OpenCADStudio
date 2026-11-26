@@ -58,11 +58,33 @@ impl OpenCADStudio {
         let Some(color) = self.creation_preview_color(i) else {
             return;
         };
+        let weight = self.creation_preview_weight_px(i);
         for wire in previews {
             if wire.color == crate::scene::WireModel::CYAN {
                 wire.color = color;
+                // The new object's lineweight too (finding 152): drawn at it
+                // while LWDISPLAY is on, as the object is once added.
+                wire.line_weight_px = weight;
             }
         }
+    }
+
+    /// The display width of the current lineweight (CELWEIGHT; ByLayer,
+    /// ByBlock and Default take the current layer's), as an entity gets it.
+    pub(in crate::app) fn creation_preview_weight_px(&self, i: usize) -> f32 {
+        use document::types::LineWeight;
+        let tab = &self.tabs[i];
+        let document = &tab.scene.document;
+        let own = LineWeight::from_value(document.header.current_line_weight);
+        let resolved = match own {
+            LineWeight::ByLayer | LineWeight::ByBlock | LineWeight::Default => document
+                .layers
+                .get(&tab.active_layer)
+                .map(|layer| layer.line_weight.clone())
+                .unwrap_or(LineWeight::Default),
+            other => other,
+        };
+        crate::scene::view::render::lineweight_to_px(&resolved)
     }
 
     /// The navigation style's action for `held` and the modifiers now down.
