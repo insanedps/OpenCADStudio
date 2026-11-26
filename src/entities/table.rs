@@ -272,6 +272,49 @@ fn cell_text_height(
         .or_else(|| set(content.text_height))
 }
 
+/// An absolute inline height that sets the whole text: `\H<n>;…` or
+/// `{\H<n>;…}` at the start, with no other height change after it.
+/// A factor (`\H<n>x;`) is not absolute and gives None.
+fn whole_text_inline_height(text: &str) -> Option<f64> {
+    let body = text.strip_prefix('{').unwrap_or(text);
+    let rest = body.strip_prefix("\\H")?;
+    let end = rest.find(';')?;
+    let value = &rest[..end];
+    if value.ends_with(['x', 'X']) || rest[end + 1..].contains("\\H") {
+        return None;
+    }
+    value.trim().parse::<f64>().ok().filter(|h| *h > 1e-6)
+}
+
+/// The text without a whole-text inline height (see above), so a typed
+/// height is not overruled by it.
+fn strip_whole_text_inline_height(text: &str) -> Option<String> {
+    whole_text_inline_height(text)?;
+    let braced = text.starts_with('{');
+    let body = if braced { &text[1..] } else { text };
+    let after = &body[body.find(';')? + 1..];
+    if braced {
+        // `{\H2;abc}` -> `abc`; keep the text when the brace closes earlier.
+        if let Some(inner) = after.strip_suffix('}').filter(|inner| !inner.contains(['{', '}'])) {
+            return Some(inner.to_string());
+        }
+        return Some(format!("{{{after}"));
+    }
+    Some(after.to_string())
+}
+
+/// The height a cell's first content is drawn at, as the panel shows it.
+fn shown_cell_text_height(
+    table: &Table,
+    row: &document::entities::table::TableRow,
+    column: usize,
+    cell: &document::entities::table::TableCell,
+) -> Option<f64> {
+    let content = cell.contents.first()?;
+    whole_text_inline_height(cell.text_value())
+        .or_else(|| cell_text_height(table, row, column, cell, content, None))
+}
+
 /// A cell's text style: the content's own, else the cell, row, column or
 /// table style that sets it (by handle, or by name for a cell override).
 fn cell_text_style(
@@ -3096,6 +3139,86 @@ impl Grippable for Table {
     }
 }
 
+/// The cells a picked range holds, each merged block once (by its top left
+/// cell), as (row, column).
+fn range_owner_cells(table: &Table, range: (usize, usize, usize, usize)) -> Vec<(usize, usize)> {
+    if table.rows.is_empty() || table.columns.is_empty() {
+        return Vec::new();
+    }
+    let (r0, c0, r1, c1) = widen_to_merged(table, range);
+    let (r1, c1) = (r1.min(table.rows.len() - 1), c1.min(table.columns.len() - 1));
+    let mut owners = Vec::new();
+    for row in r0..=r1 {
+        for column in c0..=c1 {
+            let (o0, oc, _, _) = widen_to_merged(table, (row, column, row, column));
+            if (o0, oc) == (row, column) {
+                owners.push((row, column));
+            }
+        }
+    }
+    owners
+}
+
+/// A row's value when the picked cells disagree on it.
+fn varies_value(value: &PropValue) -> PropValue {
+    const VARIES: &str = crate::entities::common::VARIES_LABEL;
+    match value {
+        PropValue::EditText(_) => PropValue::EditText(VARIES.into()),
+        PropValue::PlainText(_) => PropValue::PlainText(VARIES.into()),
+        PropValue::ReadOnly(_) => PropValue::ReadOnly(VARIES.into()),
+        PropValue::Choice { options, .. } => PropValue::Choice {
+            selected: VARIES.into(),
+            options: options.clone(),
+        },
+        PropValue::ColorChoice(_) => PropValue::ColorVaries,
+        PropValue::FieldLwChoice { field, .. } => PropValue::FieldLwVaries { field },
+        PropValue::BoolToggle { .. } => PropValue::ReadOnly(VARIES.into()),
+        other => other.clone(),
+    }
+}
+
+/// The panel rows of a picked range of two or more cells: each cell's own
+/// rows, a row kept as is where all agree, else *VARIES*. None for a single
+/// cell (a merged block counts as one) or no range.
+fn range_cell_properties(table: &Table, text_style_names: &[String]) -> Option<Vec<PropSection>> {
+    let range = prop_cell_range()?;
+    let owners = range_owner_cells(table, range);
+    if owners.len() < 2 {
+        return None;
+    }
+    let columns = table.columns.len();
+    let saved_cell = prop_current_cell();
+    let mut merged: Option<Vec<PropSection>> = None;
+    for (row, column) in owners {
+        set_prop_cell_range(Some((row, column, row, column)));
+        set_prop_current_cell(row * columns + column);
+        let sections = table.geometry_properties(text_style_names);
+        match merged.as_mut() {
+            None => merged = Some(sections),
+            Some(acc) => {
+                for section in acc.iter_mut() {
+                    let Some(other) = sections.iter().find(|s| s.title == section.title) else {
+                        continue;
+                    };
+                    for prop in section.props.iter_mut() {
+                        let differs = other
+                            .props
+                            .iter()
+                            .find(|o| o.field == prop.field)
+                            .is_some_and(|o| o.value != prop.value);
+                        if differs {
+                            prop.value = varies_value(&prop.value);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    set_prop_cell_range(Some(range));
+    set_prop_current_cell(saved_cell);
+    merged
+}
+
 /// Height of the first piece of a broken table: the rows that fit in the
 /// break height (at least one). None when the table is whole.
 fn first_piece_height(table: &Table) -> Option<f64> {
@@ -3157,6 +3280,12 @@ fn column_grip_offset(table: &Table) -> f64 {
 
 impl PropertyEditable for Table {
     fn geometry_properties(&self, text_style_names: &[String]) -> Vec<PropSection> {
+        // Several picked cells: each row lists its value when every picked
+        // cell has the same one, else *VARIES* (one cell's values used to
+        // stand for all, and width/height showed the whole span).
+        if let Some(merged) = range_cell_properties(self, text_style_names) {
+            return merged;
+        }
         use crate::entities::common::edit_prop as edit;
         use document::entities::table::{BreakOptionFlags, CellStateFlags, CellStylePropertyFlags};
         let bool_text = |value: bool| if value { t!("Yes") } else { t!("No") }.into_owned();
@@ -3263,6 +3392,12 @@ impl PropertyEditable for Table {
                 cell.and_then(|cell| style_for_property(self, row, cell_column, cell, property))
             })
         };
+        // The height the cell's text is drawn at (content format, inline
+        // whole-text height, then the style chain), not just the style's.
+        let shown_text_height = table_row
+            .zip(cell)
+            .and_then(|(row, cell)| shown_cell_text_height(self, row, cell_column, cell))
+            .unwrap_or(0.18);
         let alignment_style = style_for(CellStylePropertyFlags::ALIGNMENT);
         let alignment = match alignment_style.map(|style| style.alignment).unwrap_or(5) {
             1 => "Top Left",
@@ -3557,9 +3692,7 @@ impl PropertyEditable for Table {
                         number(
                             t!("Text height").as_ref(),
                             "tbl_cell_text_height",
-                            style_for(CellStylePropertyFlags::TEXT_HEIGHT)
-                                .map(|style| style.text_height)
-                                .unwrap_or(0.18),
+                            shown_text_height,
                             format_editable,
                         ),
                         choice(
@@ -3764,9 +3897,7 @@ impl PropertyEditable for Table {
                     number(
                         t!("Text height").as_ref(),
                         "tbl_cell_text_height",
-                        style_for(CellStylePropertyFlags::TEXT_HEIGHT)
-                            .map(|style| style.text_height)
-                            .unwrap_or(0.18),
+                        shown_text_height,
                         format_editable,
                     ),
                     color(
@@ -4009,6 +4140,7 @@ impl PropertyEditable for Table {
                 (prop_cell_range(), parse_f64(value).filter(|n| *n > 0.0))
             {
                 let (r0, c0, r1, c1) = widen_to_merged(self, range);
+                let several = range_owner_cells(self, range).len() >= 2;
                 let sizes: Vec<&mut f64> = if field == "tbl_cell_width" {
                     self.columns[c0..=c1]
                         .iter_mut()
@@ -4020,6 +4152,15 @@ impl PropertyEditable for Table {
                         .map(|r| &mut r.height)
                         .collect()
                 };
+                // Two or more picked cells: each column (row) takes the value,
+                // as the reference does; scaling the span to it squeezed the
+                // rows of a picked block to a fraction of what was typed.
+                if several {
+                    for size in sizes {
+                        *size = number;
+                    }
+                    return;
+                }
                 let span: f64 = sizes.iter().map(|size| **size).sum();
                 if span > 1e-12 {
                     for size in sizes {
@@ -4604,6 +4745,22 @@ impl PropertyEditable for Table {
                         style
                             .property_flags
                             .insert(document::entities::table::CellStylePropertyFlags::TEXT_HEIGHT);
+                        // The content's own height and a whole-text inline
+                        // height outrank the cell style: the typed height
+                        // used to be stored but never drawn.
+                        for content in cell.contents.iter_mut() {
+                            if content
+                                .sets(document::entities::table::CellStylePropertyFlags::TEXT_HEIGHT)
+                            {
+                                content.text_height = number;
+                            }
+                        }
+                        let plain = cell.contents.first().is_some_and(|c| c.field_handle.is_none());
+                        if plain {
+                            if let Some(stripped) = strip_whole_text_inline_height(cell.text_value()) {
+                                cell.set_text(&stripped);
+                            }
+                        }
                     }
                 }
             }
@@ -5510,6 +5667,93 @@ mod tests {
         table.set_cell_text(1, 0, "30");
         table.set_cell_text(1, 1, "40");
         table
+    }
+
+    /// One clicked cell, as the viewport sets it: a one-cell range.
+    fn pick_cell(row: usize, column: usize) {
+        set_prop_cell_range(Some((row, column, row, column)));
+        set_prop_current_cell(row * 2 + column);
+    }
+
+    /// The panel row `field` as debug text (any value kind).
+    fn panel_value(table: &Table, field: &str) -> String {
+        table
+            .geometry_properties(&[])
+            .iter()
+            .flat_map(|section| section.props.iter())
+            .find(|prop| prop.field == field)
+            .map(|prop| format!("{:?}", prop.value))
+            .unwrap_or_else(|| panic!("no panel row {field}"))
+    }
+
+    /// Several picked cells: a row whose values differ shows *VARIES*, one
+    /// whose values agree keeps it; the first cell no longer stands for all.
+    #[test]
+    fn picked_cells_show_varies_where_they_differ() {
+        let table = sample_table();
+        set_prop_cell_range(Some((0, 0, 1, 1)));
+        set_prop_current_cell(0);
+        let contents = panel_value(&table, "tbl_cell_text");
+        let width = panel_value(&table, "tbl_cell_width");
+        set_prop_cell_range(None);
+        assert!(contents.contains(crate::entities::common::VARIES_LABEL), "{contents}");
+        assert!(!width.contains(crate::entities::common::VARIES_LABEL), "{width}");
+        // A single cell still shows its own value.
+        pick_cell(1, 1);
+        assert!(panel_value(&table, "tbl_cell_text").contains("40"));
+        set_prop_cell_range(None);
+    }
+
+    /// A height typed for a picked column of cells goes to each row, as the
+    /// reference does; it used to scale the span to the typed total.
+    #[test]
+    fn picked_cells_height_sets_each_row() {
+        let mut table = sample_table();
+        for row in table.rows.iter_mut() {
+            row.height = 4.5;
+        }
+        set_prop_cell_range(Some((0, 0, 1, 0)));
+        set_prop_current_cell(0);
+        table.apply_geom_prop("tbl_cell_height", "0.8");
+        set_prop_cell_range(None);
+        let heights: Vec<f64> = table.rows.iter().map(|row| row.height).collect();
+        assert_eq!(heights, vec![0.8, 0.8]);
+    }
+
+    /// The panel's text height is the drawn one: a whole-text inline height
+    /// or the content's own format outrank the style chain. Typing a height
+    /// replaces both, so the typed value is what gets drawn.
+    #[test]
+    fn panel_text_height_is_the_drawn_height() {
+        use document::entities::table::CellStylePropertyFlags as P;
+        let mut table = sample_table();
+        table.set_cell_text(0, 0, "{\\H2.5;Invertor}");
+        pick_cell(0, 0);
+        assert!(panel_value(&table, "tbl_cell_text_height").contains("2.5"));
+        table.apply_geom_prop("tbl_cell_text_height", "0.3");
+        assert_eq!(table.cell(0, 0).unwrap().text_value(), "Invertor");
+        assert!(panel_value(&table, "tbl_cell_text_height").contains("0.3"));
+
+        let content = &mut table.cell_mut(0, 1).unwrap().contents[0];
+        content.format_property_flags |= P::TEXT_HEIGHT.bits() as i32;
+        content.text_height = 1.25;
+        pick_cell(0, 1);
+        assert!(panel_value(&table, "tbl_cell_text_height").contains("1.25"));
+        table.apply_geom_prop("tbl_cell_text_height", "0.4");
+        assert_eq!(table.cell(0, 1).unwrap().contents[0].text_height, 0.4);
+        set_prop_cell_range(None);
+        set_prop_current_cell(0);
+    }
+
+    #[test]
+    fn whole_text_inline_height_only_reads_absolute_whole_text() {
+        assert_eq!(whole_text_inline_height("\\H2;abc"), Some(2.0));
+        assert_eq!(whole_text_inline_height("{\\H0.25;abc}"), Some(0.25));
+        assert_eq!(whole_text_inline_height("\\H2x;abc"), None);
+        assert_eq!(whole_text_inline_height("\\H2;a\\H3;b"), None);
+        assert_eq!(whole_text_inline_height("abc"), None);
+        assert_eq!(strip_whole_text_inline_height("{\\H2;abc}").as_deref(), Some("abc"));
+        assert_eq!(strip_whole_text_inline_height("\\H2;abc").as_deref(), Some("abc"));
     }
 
     /// Delimiters located independently (`find('(')` forward, `rfind(')')`
