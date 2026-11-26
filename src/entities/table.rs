@@ -295,7 +295,10 @@ fn strip_whole_text_inline_height(text: &str) -> Option<String> {
     let after = &body[body.find(';')? + 1..];
     if braced {
         // `{\H2;abc}` -> `abc`; keep the text when the brace closes earlier.
-        if let Some(inner) = after.strip_suffix('}').filter(|inner| !inner.contains(['{', '}'])) {
+        if let Some(inner) = after
+            .strip_suffix('}')
+            .filter(|inner| !inner.contains(['{', '}']))
+        {
             return Some(inner.to_string());
         }
         return Some(format!("{{{after}"));
@@ -3146,7 +3149,10 @@ fn range_owner_cells(table: &Table, range: (usize, usize, usize, usize)) -> Vec<
         return Vec::new();
     }
     let (r0, c0, r1, c1) = widen_to_merged(table, range);
-    let (r1, c1) = (r1.min(table.rows.len() - 1), c1.min(table.columns.len() - 1));
+    let (r1, c1) = (
+        r1.min(table.rows.len() - 1),
+        c1.min(table.columns.len() - 1),
+    );
     let mut owners = Vec::new();
     for row in r0..=r1 {
         for column in c0..=c1 {
@@ -4749,15 +4755,20 @@ impl PropertyEditable for Table {
                         // height outrank the cell style: the typed height
                         // used to be stored but never drawn.
                         for content in cell.contents.iter_mut() {
-                            if content
-                                .sets(document::entities::table::CellStylePropertyFlags::TEXT_HEIGHT)
-                            {
+                            if content.sets(
+                                document::entities::table::CellStylePropertyFlags::TEXT_HEIGHT,
+                            ) {
                                 content.text_height = number;
                             }
                         }
-                        let plain = cell.contents.first().is_some_and(|c| c.field_handle.is_none());
+                        let plain = cell
+                            .contents
+                            .first()
+                            .is_some_and(|c| c.field_handle.is_none());
                         if plain {
-                            if let Some(stripped) = strip_whole_text_inline_height(cell.text_value()) {
+                            if let Some(stripped) =
+                                strip_whole_text_inline_height(cell.text_value())
+                            {
                                 cell.set_text(&stripped);
                             }
                         }
@@ -5696,8 +5707,14 @@ mod tests {
         let contents = panel_value(&table, "tbl_cell_text");
         let width = panel_value(&table, "tbl_cell_width");
         set_prop_cell_range(None);
-        assert!(contents.contains(crate::entities::common::VARIES_LABEL), "{contents}");
-        assert!(!width.contains(crate::entities::common::VARIES_LABEL), "{width}");
+        assert!(
+            contents.contains(crate::entities::common::VARIES_LABEL),
+            "{contents}"
+        );
+        assert!(
+            !width.contains(crate::entities::common::VARIES_LABEL),
+            "{width}"
+        );
         // A single cell still shows its own value.
         pick_cell(1, 1);
         assert!(panel_value(&table, "tbl_cell_text").contains("40"));
@@ -5752,8 +5769,14 @@ mod tests {
         assert_eq!(whole_text_inline_height("\\H2x;abc"), None);
         assert_eq!(whole_text_inline_height("\\H2;a\\H3;b"), None);
         assert_eq!(whole_text_inline_height("abc"), None);
-        assert_eq!(strip_whole_text_inline_height("{\\H2;abc}").as_deref(), Some("abc"));
-        assert_eq!(strip_whole_text_inline_height("\\H2;abc").as_deref(), Some("abc"));
+        assert_eq!(
+            strip_whole_text_inline_height("{\\H2;abc}").as_deref(),
+            Some("abc")
+        );
+        assert_eq!(
+            strip_whole_text_inline_height("\\H2;abc").as_deref(),
+            Some("abc")
+        );
     }
 
     /// Delimiters located independently (`find('(')` forward, `rfind(')')`
