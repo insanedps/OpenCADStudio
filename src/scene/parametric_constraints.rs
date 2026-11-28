@@ -2956,6 +2956,15 @@ impl super::Scene {
                     );
                 }
             }
+            // A stored picture was drawn at the size of an earlier view.
+            // Drawn from it, the text would keep that size while the lock
+            // mark is placed for the new one. Only the reference goes: the
+            // next save draws the picture again.
+            if let Some(document::EntityType::Dimension(dimension)) =
+                self.document.get_entity_mut(handle)
+            {
+                dimension.base_mut().block_name.clear();
+            }
             changes.push((handle, super::ChangeKind::Modified));
         }
         // Only the dimensions' look changed: no solve, no associative pass and
@@ -3862,6 +3871,122 @@ mod tests {
 
     fn h(v: u64) -> Handle {
         Handle::new(v)
+    }
+
+    /// A dynamic dimension keeps its text at one size on screen: the view's
+    /// zoom rewrites its size overrides. A picture stored for it (creating a
+    /// dimensional constraint and a save both store one) was drawn at the
+    /// earlier size, so it must not draw the dimension after the zoom, or the
+    /// text keeps the old size while the lock mark is placed for the new one.
+    #[test]
+    fn a_zoom_drops_the_picture_of_a_dynamic_dimension() {
+        use crate::entities::dim_override as ov;
+        let mut scene = super::super::Scene::new();
+        let mut line = document::entities::Line::from_points(
+            Vector3::new(0.0, 0.0, 0.0),
+            Vector3::new(100.0, 0.0, 0.0),
+        );
+        line.common.handle = h(1);
+        scene
+            .document
+            .add_entity(document::EntityType::Line(line))
+            .unwrap();
+        let dimension = crate::entities::dimension::build::linear::linear_dimension_entity(
+            glam::DVec3::new(0.0, 0.0, 0.0),
+            glam::DVec3::new(100.0, 0.0, 0.0),
+            glam::DVec3::new(50.0, 20.0, 0.0),
+            glam::DVec3::X,
+            None,
+        );
+        let mut dimension = match dimension {
+            document::EntityType::Dimension(dimension) => dimension,
+            _ => panic!("the builder must return a dimension"),
+        };
+        dimension.base_mut().common.handle = h(2);
+        dimension.base_mut().common.layer = DYNAMIC_DIMENSION_LAYER.to_string();
+        scene
+            .document
+            .add_entity(document::EntityType::Dimension(dimension))
+            .unwrap();
+        let set = scene.parametric_constraint_set_mut(ParametricScope::ModelSpace);
+        let id = set.add(
+            ConstraintKind::DistanceX,
+            vec![ParametricRef::point(h(1), 0), ParametricRef::point(h(1), 1)],
+            Some(DrivingValue::Named("d1".to_string())),
+        );
+        set.dimensions.insert(id, h(2));
+        scene.refresh_dynamic_dimension_texts();
+
+        // (override scale, drawn from a picture, the picture's text height)
+        let state = |scene: &super::super::Scene| {
+            let entity = scene.document.get_entity(h(2)).expect("the dimension");
+            let base = crate::entities::dimension::as_dimension(entity)
+                .expect("a dimension")
+                .base();
+            let scale = ov::real(&base.common.extended_data, ov::DIMSCALE).expect("a scale");
+            let from_picture =
+                crate::entities::block_ref::entity_render_block_uses(&scene.document, entity, 1.0)
+                    .iter()
+                    .any(|block_use| block_use.active);
+            let picture_text = scene
+                .document
+                .block_records
+                .get(base.block_name.trim())
+                .and_then(|record| {
+                    record.entity_handles.iter().find_map(|handle| {
+                        match scene.document.get_entity(*handle) {
+                            Some(document::EntityType::Text(text)) => Some(text.height),
+                            Some(document::EntityType::MText(text)) => Some(text.height),
+                            _ => None,
+                        }
+                    })
+                });
+            (scale, from_picture, picture_text)
+        };
+        let zoom = |scene: &mut super::super::Scene, world_per_pixel: f32| {
+            scene.last_world_per_pixel.set(world_per_pixel);
+            scene.camera_generation += 1;
+            scene.refresh_dynamic_dimension_scales(false);
+        };
+
+        zoom(&mut scene, 0.1);
+        crate::scene::explode::bake_dimension_blocks(&mut scene.document);
+        let (scale, from_picture, picture_text) = state(&scene);
+        assert!(from_picture, "a stored picture draws the dimension");
+        let picture_text = picture_text.expect("the picture holds the text");
+        // 12 px at 0.1 units per pixel.
+        assert!(
+            (picture_text - 1.2).abs() < 1e-6,
+            "picture text {picture_text}"
+        );
+
+        // The same view again: nothing changed, the picture stays.
+        zoom(&mut scene, 0.1);
+        let (same_scale, from_picture, _) = state(&scene);
+        assert!((same_scale - scale).abs() < 1e-9);
+        assert!(from_picture, "an unchanged view keeps the picture");
+
+        // Zoomed out five times: the override follows, the picture does not.
+        zoom(&mut scene, 0.5);
+        let (zoomed_scale, from_picture, _) = state(&scene);
+        assert!(
+            (zoomed_scale / scale - 5.0).abs() < 1e-6,
+            "scale {scale} -> {zoomed_scale}"
+        );
+        assert!(
+            !from_picture,
+            "the picture drawn for the earlier view must not draw the dimension"
+        );
+
+        // A picture stored now is drawn at the size of this view.
+        crate::scene::explode::bake_dimension_blocks(&mut scene.document);
+        let (_, from_picture, picture_text) = state(&scene);
+        assert!(from_picture);
+        let picture_text = picture_text.expect("the picture holds the text");
+        assert!(
+            (picture_text - 6.0).abs() < 1e-5,
+            "picture text {picture_text}"
+        );
     }
 
     /// The label a dynamic constraint shows is this function's output, and
